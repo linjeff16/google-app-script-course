@@ -70,7 +70,7 @@ function 讀取工作表資訊() {
 
   // 取得所有有資料的範圍
   var 資料範圍 = sheet.getDataRange();
-  Logger.log("資料範圍：" + 資料範圍.getA1Notation());  // e.g. "A1:F11"
+  Logger.log("資料範圍：" + 資料範圍.getA1Notation()); // e.g. "A1:F11"
 }
 
 // ============================================================
@@ -102,7 +102,6 @@ function 建立工作表示範() {
     ss.deleteSheet(新表2);
     ss.deleteSheet(新表3);
     Logger.log("✅ 測試工作表已清理");
-
   } catch (錯誤) {
     Logger.log("❌ 錯誤：" + 錯誤.message);
   }
@@ -115,54 +114,72 @@ function 建立工作表示範() {
 function 自動建立月報表() {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var 員工表 = ss.getSheetByName("員工資料");
+    
+    if (!員工表) {
+      SpreadsheetApp.getUi().alert("❌ 找不到「員工資料」工作表，請先點選「初始化員工資料」。");
+      return;
+    }
+
+    // 1. 取得員工基本資料
+    var 最後一列 = 員工表.getLastRow();
+    if (最後一列 < 2) {
+      SpreadsheetApp.getUi().alert("⚠️ 員工資料中沒有數據。");
+      return;
+    }
+    // 取得資料 (姓名、部門、月薪分別在第 1, 2, 5 欄)
+    var 員工原始資料 = 員工表.getRange(2, 1, 最後一列 - 1, 5).getValues();
+
+    // 2. 準備新工作表
     var 今天 = new Date();
     var 年 = 今天.getFullYear();
-    var 月 = 今天.getMonth() + 1; // getMonth() 從 0 開始
-    var 表名 = 年 + "年" + 月 + "月報表";
+    var 月 = 今天.getMonth() + 1;
+    var 表名 = 年 + "年" + 月 + "月薪資報表";
 
     // 檢查工作表是否已存在
     var 既有表 = ss.getSheetByName(表名);
     if (既有表) {
-      Logger.log("⚠️ 「" + 表名 + "」已存在，跳過建立");
-      SpreadsheetApp.getUi().alert("⚠️ 「" + 表名 + "」已存在！");
+      SpreadsheetApp.getUi().alert("⚠️ 「" + 表名 + "」已存在，請先刪除舊表或更名。");
       return;
     }
 
-    // 建立新工作表
     var 新表 = ss.insertSheet(表名);
 
-    // 設定標題列
-    var 標題 = [["日期", "部門", "項目", "收入", "支出", "備註"]];
-    新表.getRange("A1:F1").setValues(標題);
+    // 3. 設定標題列與格式
+    var 標題 = [["姓名", "部門", "基本月薪", "加班津貼", "應領金額"]];
+    新表.getRange("A1:E1").setValues(標題);
+    
+    var 標題範圍 = 新表.getRange("A1:E1");
+    標題範圍.setBackground("#34a853").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
 
-    // 格式化標題
-    var 標題範圍 = 新表.getRange("A1:F1");
-    標題範圍.setBackground("#34a853");
-    標題範圍.setFontColor("#ffffff");
-    標題範圍.setFontWeight("bold");
-    標題範圍.setFontSize(11);
-    標題範圍.setHorizontalAlignment("center");
+    // 4. 準備並寫入報表內容
+    var 報表內容 = [];
+    for (var i = 0; i < 員工原始資料.length; i++) {
+      var 姓名 = 員工原始資料[i][0];
+      var 部門 = 員工原始資料[i][1];
+      var 月薪 = 員工原始資料[i][4];
+      
+      // 示範：隨機產生一些加班津貼
+      var 加班費 = Math.floor(Math.random() * 3000) + 1000;
+      var 總計 = 月薪 + 加班費;
+      
+      報表內容.push([姓名, 部門, 月薪, 加班費, 總計]);
+    }
 
-    // 設定欄寬
-    新表.setColumnWidth(1, 120);  // 日期
-    新表.setColumnWidth(2, 100);  // 部門
-    新表.setColumnWidth(3, 200);  // 項目
-    新表.setColumnWidth(4, 120);  // 收入
-    新表.setColumnWidth(5, 120);  // 支出
-    新表.setColumnWidth(6, 200);  // 備註
+    // 寫入所有資料
+    新表.getRange(2, 1, 報表內容.length, 5).setValues(報表內容);
 
-    // 設定數字格式
-    新表.getRange("D2:D100").setNumberFormat("#,##0");
-    新表.getRange("E2:E100").setNumberFormat("#,##0");
-    新表.getRange("A2:A100").setNumberFormat("yyyy/mm/dd");
+    // 5. 最後修飾
+    新表.getRange(2, 3, 報表內容.length, 3).setNumberFormat("#,##0"); // 格式化金額
+    新表.setFrozenRows(1); // 凍結首列
+    
+    for (var j = 1; j <= 5; j++) {
+      新表.autoResizeColumn(j);
+      var 目前寬度 = 新表.getColumnWidth(j);
+      新表.setColumnWidth(j, 目前寬度 + 30); // 增加 30 像素緩衝
+    }
 
-    // 凍結標題列
-    新表.setFrozenRows(1);
-
-    // 在 A2 寫入月份起始日
-    新表.getRange("A2").setValue(new Date(年, 月 - 1, 1));
-
-    Logger.log("✅ 「" + 表名 + "」建立完成！");
+    Logger.log("✅ 「" + 表名 + "」建立完成，共計 " + 報表內容.length + " 位員工。");
     SpreadsheetApp.getUi().alert("✅ 「" + 表名 + "」建立完成！");
 
   } catch (錯誤) {
@@ -192,24 +209,34 @@ function 讀寫儲存格示範() {
   // --- 讀取範圍 ---
   var 範圍值 = sheet.getRange("A1:C3").getValues();
   Logger.log("A1:C3 的值：" + JSON.stringify(範圍值));
-  // 範圍值是二維陣列：[[A1, B1, C1], [A2, B2, C2], [A3, B3, C3]]
 
-  // --- 寫入單一儲存格 ---
-  sheet.getRange("H1").setValue("更新時間");
-  sheet.getRange("H2").setValue(new Date());
-
-  // --- 寫入範圍（一次寫入多個值）---
-  var 要寫入的資料 = [
-    ["加班時數"],
-    [8],
-    [4],
-    [12],
-    [0],
-    [6]
+  // --- 寫入 11 筆資料（一次寫入多欄多列） ---
+  var 現在時間 = "2026/5/9"; // Hardcode 固定時間示範
+  
+  var 示範資料 = [
+    ["更新時間", "加班時數"],   // 第 1 筆：標題
+    [現在時間, 8],              // 第 2 筆
+    [現在時間, 4],              // 第 3 筆
+    [現在時間, 12],             // 第 4 筆
+    [現在時間, 0],              // 第 5 筆
+    [現在時間, 6],              // 第 6 筆
+    [現在時間, 10],             // 第 7 筆
+    [現在時間, 2],              // 第 8 筆
+    [現在時間, 5],              // 第 9 筆
+    [現在時間, 9],              // 第 10 筆
+    [現在時間, 3]               // 第 11 筆
   ];
-  sheet.getRange("I1:I6").setValues(要寫入的資料);
 
-  Logger.log("✅ 讀寫示範完成");
+  // 使用 setValues 一次寫入 11 列、2 欄 (範圍從 H1 開始，即第 1 列、第 8 欄)
+  sheet.getRange(1, 8, 11, 2).setValues(示範資料);
+  
+  // 自動調整欄寬以符合時間字串長度
+  // 自動調整欄寬並增加緩衝空間
+  sheet.autoResizeColumn(8);
+  var 欄寬8 = sheet.getColumnWidth(8);
+  sheet.setColumnWidth(8, 欄寬8 + 30);
+
+  Logger.log("✅ 讀寫示範完成，已寫入 11 筆資料（包含當前格式化時間：" + 現在時間 + "）");
 }
 
 // ============================================================
@@ -233,12 +260,14 @@ function 設定每日觸發器() {
   // 建立新的時間觸發器：每天 9~10 點之間執行
   ScriptApp.newTrigger("每日自動報告")
     .timeBased()
-    .everyDays(1)       // 每天
-    .atHour(9)          // 早上 9 點
+    .everyDays(1) // 每天
+    .atHour(9) // 早上 9 點
     .create();
 
   Logger.log("✅ 每日觸發器已設定（9:00~10:00）");
-  SpreadsheetApp.getUi().alert("✅ 每日觸發器已設定！\n每天 9:00~10:00 會自動執行。");
+  SpreadsheetApp.getUi().alert(
+    "✅ 每日觸發器已設定！\n每天 9:00~10:00 會自動執行。",
+  );
 }
 
 /**
@@ -261,13 +290,16 @@ function 每日自動報告() {
     var 新列 = sheet.getLastRow() + 1;
     var 現在 = new Date();
 
-    sheet.getRange(新列, 1).setValue(Utilities.formatDate(現在, "Asia/Taipei", "yyyy/MM/dd"));
-    sheet.getRange(新列, 2).setValue(Utilities.formatDate(現在, "Asia/Taipei", "HH:mm:ss"));
+    sheet
+      .getRange(新列, 1)
+      .setValue(Utilities.formatDate(現在, "Asia/Taipei", "yyyy/MM/dd"));
+    sheet
+      .getRange(新列, 2)
+      .setValue(Utilities.formatDate(現在, "Asia/Taipei", "HH:mm:ss"));
     sheet.getRange(新列, 3).setValue("每日自動報告已執行");
     sheet.getRange(新列, 4).setValue("✅ 正常");
 
     Logger.log("✅ 每日報告已記錄：" + 現在);
-
   } catch (錯誤) {
     Logger.log("❌ 每日報告錯誤：" + 錯誤.message);
   }
@@ -305,16 +337,96 @@ function 初始化員工資料() {
 
   var 標題 = [["姓名", "部門", "職稱", "到職日", "月薪", "電話", "Email"]];
   var 資料 = [
-    ["王小明", "業務部", "業務專員", "2023/03/15", 38000, "0912-345-678", "wang@example.com"],
-    ["李小華", "行銷部", "行銷主管", "2021/08/01", 52000, "0923-456-789", "lee@example.com"],
-    ["張美玲", "人資部", "人資專員", "2022/11/20", 40000, "0934-567-890", "chang@example.com"],
-    ["陳大文", "研發部", "工程師", "2024/01/10", 55000, "0945-678-901", "chen@example.com"],
-    ["林小芬", "財務部", "會計", "2020/06/15", 42000, "0956-789-012", "lin@example.com"],
-    ["黃志偉", "業務部", "業務主管", "2019/04/01", 58000, "0967-890-123", "huang@example.com"],
-    ["劉家豪", "研發部", "資深工程師", "2018/09/10", 68000, "0978-901-234", "liu@example.com"],
-    ["吳雅琪", "行銷部", "行銷專員", "2023/07/20", 36000, "0989-012-345", "wu@example.com"],
-    ["周建國", "業務部", "業務專員", "2024/03/01", 35000, "0911-123-456", "chou@example.com"],
-    ["許文馨", "人資部", "人資主管", "2020/01/15", 56000, "0922-234-567", "hsu@example.com"]
+    [
+      "王小明",
+      "業務部",
+      "業務專員",
+      "2023/03/15",
+      38000,
+      "0912-345-678",
+      "wang@example.com",
+    ],
+    [
+      "李小華",
+      "行銷部",
+      "行銷主管",
+      "2021/08/01",
+      52000,
+      "0923-456-789",
+      "lee@example.com",
+    ],
+    [
+      "張美玲",
+      "人資部",
+      "人資專員",
+      "2022/11/20",
+      40000,
+      "0934-567-890",
+      "chang@example.com",
+    ],
+    [
+      "陳大文",
+      "研發部",
+      "工程師",
+      "2024/01/10",
+      55000,
+      "0945-678-901",
+      "chen@example.com",
+    ],
+    [
+      "林小芬",
+      "財務部",
+      "會計",
+      "2020/06/15",
+      42000,
+      "0956-789-012",
+      "lin@example.com",
+    ],
+    [
+      "黃志偉",
+      "業務部",
+      "業務主管",
+      "2019/04/01",
+      58000,
+      "0967-890-123",
+      "huang@example.com",
+    ],
+    [
+      "劉家豪",
+      "研發部",
+      "資深工程師",
+      "2018/09/10",
+      68000,
+      "0978-901-234",
+      "liu@example.com",
+    ],
+    [
+      "吳雅琪",
+      "行銷部",
+      "行銷專員",
+      "2023/07/20",
+      36000,
+      "0989-012-345",
+      "wu@example.com",
+    ],
+    [
+      "周建國",
+      "業務部",
+      "業務專員",
+      "2024/03/01",
+      35000,
+      "0911-123-456",
+      "chou@example.com",
+    ],
+    [
+      "許文馨",
+      "人資部",
+      "人資主管",
+      "2020/01/15",
+      56000,
+      "0922-234-567",
+      "hsu@example.com",
+    ],
   ];
 
   sheet.getRange(1, 1, 1, 7).setValues(標題);
@@ -333,6 +445,8 @@ function 初始化員工資料() {
 
   for (var i = 1; i <= 7; i++) {
     sheet.autoResizeColumn(i);
+    var 目前寬度 = sheet.getColumnWidth(i);
+    sheet.setColumnWidth(i, 目前寬度 + 30); // 增加 30 像素緩衝
   }
 
   Logger.log("✅ 員工資料已建立！");

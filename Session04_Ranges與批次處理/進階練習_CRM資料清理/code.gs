@@ -12,6 +12,8 @@ function 批次驗證客戶資料() {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("客戶資料");
     if (!sheet) { SpreadsheetApp.getUi().alert("❌ 請先執行初始化"); return; }
 
+    // 強制同步試算表狀態，確保讀取到的是最新的（特別是清理後的）資料
+    SpreadsheetApp.flush();
     var 資料 = sheet.getDataRange().getValues();
     var 驗證結果 = [];
     var 問題數 = 0;
@@ -56,13 +58,17 @@ function 批次驗證客戶資料() {
     sheet.getRange("H1").setValue("驗證結果").setFontWeight("bold");
     sheet.getRange(2, 8, 驗證結果.length, 1).setValues(驗證結果);
 
-    // 標示有問題的列
+    // 標示有問題的列（改用批次寫入背景色，效能大幅提升並確保 UI 更新）
+    var 背景色 = [];
     for (var j = 0; j < 驗證結果.length; j++) {
       if (驗證結果[j][0].indexOf("⚠️") >= 0) {
-        sheet.getRange(j + 2, 1, 1, 8).setBackground("#fff3e0");
+        背景色.push(["#fff3e0", "#fff3e0", "#fff3e0", "#fff3e0", "#fff3e0", "#fff3e0", "#fff3e0", "#fff3e0"]);
       } else {
-        sheet.getRange(j + 2, 1, 1, 8).setBackground("#ffffff");
+        背景色.push(["#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff"]);
       }
+    }
+    if (背景色.length > 0) {
+      sheet.getRange(2, 1, 背景色.length, 8).setBackgrounds(背景色);
     }
 
     sheet.autoResizeColumn(8);
@@ -100,21 +106,44 @@ function 批次清理資料() {
         if (原Email !== 資料[i][2]) 清理計數++;
       }
 
-      // 電話統一格式（移除非數字字元後重新格式化）
+      // 電話統一格式清理
       if (資料[i][3]) {
-        var 原電話 = String(資料[i][3]);
+        var 原電話 = String(資料[i][3]).trim();
         var 純數字 = 原電話.replace(/[^0-9]/g, "");
+        
+        // 補足被試算表數值格式吃掉的字首 0 (例如 912345678 -> 0912345678)
+        if (純數字.length === 9 && 純數字[0] !== "0") {
+          純數字 = "0" + 純數字;
+        }
+
+        var 新電話 = 原電話;
         if (純數字.length === 10) {
-          資料[i][3] = 純數字.substring(0, 4) + "-" + 純數字.substring(4, 7) + "-" + 純數字.substring(7);
-          if (原電話 !== 資料[i][3]) 清理計數++;
+          if (純數字.indexOf("09") === 0) {
+            // 手機格式: 09xx-xxx-xxx
+            新電話 = 純數字.substring(0, 4) + "-" + 純數字.substring(4, 7) + "-" + 純數字.substring(7);
+          } else {
+            // 2 位數區碼市話 (如 02, 04): 0x-xxxx-xxxx
+            新電話 = 純數字.substring(0, 2) + "-" + 純數字.substring(2, 6) + "-" + 純數字.substring(6);
+          }
+        } else if (純數字.length === 9) {
+          // 2 位數區碼市話 (如 03, 05, 06): 0x-xxx-xxxx
+          新電話 = 純數字.substring(0, 2) + "-" + 純數字.substring(2, 5) + "-" + 純數字.substring(5);
+        }
+
+        if (原電話 !== 新電話) {
+          資料[i][3] = 新電話;
+          清理計數++;
         }
       }
     }
 
     // 批次寫回
     sheet.getRange(1, 1, 資料.length, 資料[0].length).setValues(資料);
+    
+    // 強制同步狀態，確保下一次「驗證」能抓到清理後的正確資料
+    SpreadsheetApp.flush();
 
-    SpreadsheetApp.getUi().alert("✅ 清理完成！共修正 " + 清理計數 + " 處");
+    SpreadsheetApp.getUi().alert("✅ 清理完成！共修正 " + 清理計數 + " 處\n請點選「批次驗證」更新最新狀態。");
 
   } catch (錯誤) { Logger.log("❌ " + 錯誤.message); }
 }
