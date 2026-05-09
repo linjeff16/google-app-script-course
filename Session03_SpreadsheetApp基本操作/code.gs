@@ -453,45 +453,6 @@ function 初始化員工資料() {
   SpreadsheetApp.getUi().alert("✅ 員工資料已建立！共 " + 資料.length + " 筆");
 }
 
-/**
- * 練習 2：工作表複製
- * 說明：將「員工資料」工作表複製一份，命名為「員工資料_備份_日期」
- */
-function 備份員工資料() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var 來源表 = ss.getSheetByName("員工資料");
-  
-  if (!來源表) {
-    SpreadsheetApp.getUi().alert("❌ 找不到「員工資料」工作表");
-    return;
-  }
-  
-  // 1. 取得目前日期並格式化 (例如：20240509)
-  var 今天 = new Date();
-  var 日期字串 = Utilities.formatDate(今天, "Asia/Taipei", "yyyyMMdd");
-  var 新表名 = "員工資料_備份_" + 日期字串;
-  
-  // 2. 檢查是否已有同名的備份表
-  var 舊備份 = ss.getSheetByName(新表名);
-  if (舊備份) {
-    // 如果當天已備份過，加上時間戳記避免名稱重複
-    var 時間字串 = Utilities.formatDate(今天, "Asia/Taipei", "HHmmss");
-    新表名 += "_" + 時間字串;
-  }
-  
-  // 3. 複製工作表
-  // copyTo 可以複製到同一個試算表或不同的試算表
-  var 副本 = 來源表.copyTo(ss);
-  副本.setName(新表名);
-  
-  // 4. 將新工作表移至最後一個分頁 (選配)
-  ss.setActiveSheet(副本);
-  ss.moveActiveSheet(ss.getNumSheets());
-  
-  Logger.log("✅ 已建立備份：" + 新表名);
-  SpreadsheetApp.getUi().alert("✅ 備份完成！\n新工作表名稱為：" + 新表名);
-}
-
 // ============================================================
 // 自訂選單
 // ============================================================
@@ -505,7 +466,6 @@ function onOpen() {
     .addItem("📝 讀寫儲存格示範", "讀寫儲存格示範")
     .addSeparator()
     .addItem("📅 建立當月報表", "自動建立月報表")
-    .addItem("💾 備份員工資料", "備份員工資料")
     .addItem("⏰ 設定每日觸發器", "設定每日觸發器")
     .addItem("🗑️ 刪除所有觸發器", "刪除所有觸發器")
     .addToUi();
